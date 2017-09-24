@@ -15,7 +15,7 @@ from .parser import parse_car_page, parse_search_results
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-redis_con = redis.StrictRedis(REDIS_URI)
+redis_con = redis.StrictRedis(REDIS_URI, decode_responses=True)
 
 
 @app.route("/api/car/<car>", methods=["GET"])
