@@ -27,11 +27,17 @@ def get_car(car):
 def search():
     request_args = request.args.to_dict()
 
+    new_request_args=[]
+    for a in request_args:
+        list=request.args.getlist(a)
+        for b in list:
+            new_request_args.append((a,b))
+
     # check if format is specified and remove it
     export_format = request_args.pop('format', 'json')
 
     # pass the rest as search params
-    search_url = SEARCH_BASE_URL + '?' + urlencode(request_args)
+    search_url = SEARCH_BASE_URL + '?' + urlencode(new_request_args)
 
     results = parse_search_results(search_url, redis_con)
 
