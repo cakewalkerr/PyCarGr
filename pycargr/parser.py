@@ -5,7 +5,7 @@ __author__ = 'Florents Tselai'
 
 from datetime import datetime
 from urllib.request import urlopen, Request
-
+from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 
@@ -16,22 +16,35 @@ from .model import Car, to_dict
 class SearchResultPageParser:
     def __init__(self, search_page_url):
         self.search_page_url = search_page_url
-        req = Request(
-            search_page_url,
-            data=None,
-            headers={
-                'User-Agent': UserAgent().chrome
-            }
-        )
-        self.html = urlopen(req).read().decode('utf-8')
-        self.soup = BeautifulSoup(self.html, 'html.parser')
         self.num_results = None
+        self.pagecount = None
+        self.carIDs = []
+        self.soup = self.htmlParser(self.search_page_url)
+        
+        li = [x for x in self.soup.find('ul', class_='pagination pull-right') if x != '\n']
+        if '»' in li[-1].text:
+            self.pagecount = int(li[-2].text)
+        else:
+            self.pagecount = int(li[-1].text)
+               
         for f in self.soup.find_all('strong'):
             if 'αγγελίες' in f.text:
                 if f.text.split()[0].isdigit():
                     self.num_results = int(f.text.split()[0])
-
-    def parse(self):
+        
+    def getCar_ids(self):
+        for i in range(1, self.pagecount+1):
+            url = self.search_page_url +'&pg='+str(i)
+            self.soup = self.htmlParser(url)
+            self.carIDs.extend(self.car_idsPerPage())
+        return self.carIDs 
+ 
+    def htmlParser(self, url):
+        req = Request(url, data=None, headers={ 'User-Agent': UserAgent().chrome})
+        htmlpage = urlopen(req).read().decode('utf-8')
+        return BeautifulSoup(htmlpage, 'html.parser')
+            
+    def car_idsPerPage(self):
         car_ids = []
         for a in self.soup.find_all('a', class_='vehicle list-group-item clsfd_list_row'):
             car_ids.append(int(a.get('href').replace('/', '').split('-')[0]))
@@ -64,7 +77,7 @@ class CarItemParser:
         try:
             for td in self.soup.find_all('td'):
                 if 'bhp' in td.text:
-                    return int(td.text.replace(' bhp', ''))
+                    return str(td.text.replace(' bhp', ''))
         except Exception:
             return None
         return None
@@ -169,17 +182,17 @@ class CarItemParser:
 
 
 def parse_search_results(search_url, redis_con):
-    car_ids = SearchResultPageParser(search_url).parse()
+    car_ids = SearchResultPageParser(search_url).getCar_ids()
     results = []
     cache_api = RedisCache(redis_con)
     for car_id in car_ids:
-        if cache_api.car_is_cached(car_id):
+        if cache_api.car_is_cached(car_id):            
             results.append(cache_api.get_cached_car(car_id))
         else:
             car_data = parse_car_page(car_id)
             cache_api.cache_car(car_id, car_data, expire_in=12 * 3600)
             results.append(car_data)
-
+            
     return results
 
 
